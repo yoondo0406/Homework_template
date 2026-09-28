@@ -9,8 +9,126 @@ if (typeof p5 === "undefined") {
 }
 
 let dropPoints = [];
-let landedCircles = []; // 바닥에 쌓인 원 저장용 배열
-let swingAngle = 0; // 회전 각도
+let landedBalls = [];
+let swingAngle = 0;
+
+// --- [ 바닥 물체 클래스 ] ---
+class LandedBall {
+  constructor(x, y, vx, color, shapeType) {
+    this.x = x;
+    this.y = y;
+    this.vx = vx;
+    this.vy = 0;
+    this.r = 8;
+    this.color = color;
+    this.shapeType = shapeType;
+    this.friction = 0.92;
+    this.bounce = -0.3;
+    this.isSettled = false;
+    this.rotation = random(TWO_PI);
+    this.rotSpeed = vx * 0.1;
+  }
+
+  update(floorBaseY) {
+    this.x += this.vx;
+    this.vx *= this.friction;
+
+    this.vy += 0.2;
+    this.y += this.vy;
+    this.rotation += this.rotSpeed;
+    this.rotSpeed *= 0.95;
+
+    if (this.y >= floorBaseY) {
+      this.y = floorBaseY;
+      this.vy *= this.bounce;
+    }
+
+    if (this.x - this.r < width * 0.1) {
+      this.x = width * 0.1 + this.r;
+      this.vx *= -0.5;
+    }
+
+    if (Math.abs(this.vx) < 0.05 && Math.abs(this.vy) < 0.1) {
+      this.vx = 0;
+      this.vy = 0;
+      this.rotSpeed = 0;
+      this.isSettled = true;
+    }
+  }
+
+  collideWithOthers(others) {
+    for (let i = 0; i < others.length; i++) {
+      let other = others[i];
+      if (other === this) continue;
+
+      let dx = other.x - this.x;
+      let dy = other.y - this.y;
+      let dist = Math.sqrt(dx * dx + dy * dy);
+      let minDist = this.r + other.r;
+
+      if (dist < minDist && dist > 0) {
+        let overlap = minDist - dist;
+        let nx = dx / dist;
+
+        this.x -= nx * overlap * 0.3;
+        other.x += nx * overlap * 0.3;
+
+        this.vx -= nx * 0.2;
+        other.vx += nx * 0.2;
+
+        this.isSettled = false;
+        other.isSettled = false;
+      }
+    }
+  }
+
+  draw() {
+    push();
+    translate(this.x, this.y);
+    rotate(this.rotation);
+    fill(this.color);
+    noStroke();
+    drawCalderShape(0, 0, this.r * 2.2, this.shapeType);
+    pop();
+  }
+
+  drawShadow() {
+    fill(0, 0, 0, 20);
+    noStroke();
+    ellipse(this.x + 1, this.y + 3, this.r * 2, 6);
+  }
+}
+
+// 칼더 모빌 스타일 유기적 도형 렌더링 함수
+function drawCalderShape(x, y, size, shapeType) {
+  push();
+  translate(x, y);
+
+  if (shapeType === 0) {
+    // 1. 유기적 조약돌
+    ellipse(0, 0, size * 1.3, size * 0.8);
+  } else if (shapeType === 1) {
+    // 2. 물방울 모양
+    circle(0, size * 0.1, size * 0.9);
+    triangle(0, -size * 0.7, -size * 0.45, 0, size * 0.45, 0);
+  } else if (shapeType === 2) {
+    // 3. 부드러운 다이아몬드 조각
+    rectMode(CENTER);
+    push();
+    rotate(QUARTER_PI);
+    rect(0, 0, size * 0.75, size * 0.75, size * 0.25);
+    pop();
+  } else if (shapeType === 3) {
+    // 4. 모빌 유기적 알약 조각
+    rectMode(CENTER);
+    rect(0, 0, size * 1.2, size * 0.6, size * 0.3);
+  } else {
+    // 5. 비대칭 나뭇잎 조각
+    ellipse(-size * 0.2, 0, size * 0.8, size * 0.5);
+    ellipse(size * 0.2, 0, size * 0.8, size * 0.5);
+  }
+  pop();
+}
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
@@ -19,21 +137,20 @@ function setup() {
 
 function initElements() {
   dropPoints = [];
-  landedCircles = [];
+  landedBalls = [];
 
   let lineConfigs = [
-    { xRatio: 0.45, length: 180, color: "#fa7b7b", weight: 5 },
-    { xRatio: 0.53, length: 110, color: "#7dc3f9", weight: 5 },
-    { xRatio: 0.62, length: 240, color: "#ebfb6f", weight: 5 },
-    { xRatio: 0.72, length: 140, color: "#9dfee7", weight: 5 },
-    { xRatio: 0.82, length: 200, color: "#fe94d2", weight: 5 },
+    { xRatio: 0.45, length: 180, color: "#fa7b7b", weight: 5, shapeType: 0 },
+    { xRatio: 0.53, length: 110, color: "#7dc3f9", weight: 5, shapeType: 1 },
+    { xRatio: 0.62, length: 240, color: "#ebfb6f", weight: 5, shapeType: 2 },
+    { xRatio: 0.72, length: 140, color: "#c0f0f9", weight: 5, shapeType: 3 },
+    { xRatio: 0.82, length: 200, color: "#fe94d2", weight: 5, shapeType: 4 },
   ];
 
   for (let i = 0; i < lineConfigs.length; i++) {
     let cfg = lineConfigs[i];
     let localX = width * cfg.xRatio;
 
-    // 초기 기준 회전축 선상의 Y 위치 구하기
     let x1 = width * 0.2;
     let y1 = height * 0.1;
     let x2 = width * 0.9;
@@ -44,14 +161,17 @@ function initElements() {
       localX: localX,
       localY: localY,
       length: cfg.length,
-      dropDistance: 15, // 삼각형 아래로부터 원이 떨어진 거리
+      dropDistance: 15,
       speed: 0,
-      gravity: 0.05 + random(0.02, 0.03),
-      landedCount: 0,
+      gravity: 0.2,
+      bounce: -0.5,
+      vx: 0,
       color: cfg.color,
       weight: cfg.weight,
+      shapeType: cfg.shapeType,
       currentX: 0,
-      currentY: 0,
+      absoluteY: 0,
+      isBouncing: false,
     });
   }
 }
@@ -59,14 +179,32 @@ function initElements() {
 function draw() {
   background("#ffd4d4");
 
-  // 1. 회전 중심축 설정 (세로 기둥과 상단 선이 만나는 지점)
   let pivotX = width * 0.36;
   let pivotY = height * 0.13;
+  let floorBaseY = height * 0.95 - 8;
 
-  // 좌우 회전 운동 연출 (진자 운동, -0.2 ~ +0.2 라디안 약 ±11도)
   swingAngle = sin(frameCount * 0.02) * 0.2;
 
-  // 2. 왼쪽 지지대 기둥 (고정된 기둥)
+  // --- [ 0. 그림자 렌더링 ] ---
+  for (let i = 0; i < landedBalls.length; i++) {
+    landedBalls[i].drawShadow();
+  }
+
+  for (let i = 0; i < dropPoints.length; i++) {
+    let p = dropPoints[i];
+    let circleY = p.isBouncing
+      ? p.absoluteY
+      : p.triangleBottomY + p.dropDistance;
+    let distToFloor = max(0, floorBaseY - circleY);
+    let shadowAlpha = map(distToFloor, 0, height * 0.5, 50, 5);
+    let shadowSize = map(distToFloor, 0, height * 0.5, 16, 6);
+
+    fill(0, 0, 0, shadowAlpha);
+    noStroke();
+    ellipse(p.currentX, floorBaseY + 8, shadowSize, shadowSize * 0.4);
+  }
+
+  // --- [ 1. 고정 지지대 기둥 및 3개 흰색 지지선 ] ---
   noFill();
   stroke("#ffffff");
   strokeWeight(5);
@@ -82,24 +220,27 @@ function draw() {
     height * 0.8,
   );
 
-  // 기둥 아래 Y자 받침 선
   line(width * 0.15, height * 0.8, width * 0.1, height * 0.95);
-  line(width * 0.15, height * 0.8, width * 0.22, height * 0.95);
   line(width * 0.15, height * 0.8, width * 0.15, height * 0.95);
+  line(width * 0.15, height * 0.8, width * 0.22, height * 0.95);
 
-  // 3. 바닥에 쌓여있는 원들 그리기
-  noStroke();
-  for (let c of landedCircles) {
-    fill(c.color);
-    circle(c.x, c.y, 16);
+  // --- [ 2. 바닥 물체 물리 및 화면 밖 삭제 ] ---
+  for (let i = landedBalls.length - 1; i >= 0; i--) {
+    let ball = landedBalls[i];
+    ball.update(floorBaseY);
+    ball.collideWithOthers(landedBalls);
+    ball.draw();
+
+    if (ball.x > width + 50) {
+      landedBalls.splice(i, 1);
+    }
   }
 
-  // --- [ 회전하는 상단 구조물 시작 ] ---
+  // --- [ 3. 회전 상단 구조물 ] ---
   push();
   translate(pivotX, pivotY);
   rotate(swingAngle);
 
-  // 상단 지지선 (회전축 기준 상대 좌표로 변환)
   stroke("#ffffff");
   strokeWeight(5);
   line(
@@ -109,78 +250,84 @@ function draw() {
     height * 0.22 - pivotY,
   );
 
-  // 4. 각각의 세로줄과 삼각형 그리기
   for (let i = 0; i < dropPoints.length; i++) {
     let p = dropPoints[i];
 
-    // 회전축 기준 상대 좌표
     let rx = p.localX - pivotX;
     let ry = p.localY - pivotY;
     let lineBottomRy = ry + p.length;
 
-    // (1) 세로줄
     stroke(p.color);
     strokeWeight(p.weight);
     line(rx, ry, rx, lineBottomRy);
 
-    // (2) 삼각형 (줄 끝부분)
+    // 상단 칼더 스타일 면 조각
     fill(p.color);
     noStroke();
-    triangle(
-      rx,
-      lineBottomRy - 12,
-      rx - 16,
-      lineBottomRy + 4,
-      rx + 16,
-      lineBottomRy + 4,
-    );
+    drawCalderShape(rx, lineBottomRy, 40, p.shapeType);
 
-    // 실제 화면(글로벌) 좌표로 변환해 저장 (원 떨어짐 계산용)
     let cosA = cos(swingAngle);
     let sinA = sin(swingAngle);
 
-    // 원이 새로 생성되는 매달린 위치의 실제 화면 좌표
-    p.spawnX = pivotX + rx * cosA - (lineBottomRy + 15) * sinA;
-    p.spawnY = pivotY + rx * sinA + (lineBottomRy + 15) * cosA;
-
-    // 회전할 때 원의 X축 궤적 수평 이동 계산
-    p.currentX = pivotX + rx * cosA - (lineBottomRy + p.dropDistance) * sinA;
     p.triangleBottomY = pivotY + rx * sinA + lineBottomRy * cosA;
+
+    if (!p.isBouncing) {
+      p.currentX = pivotX + rx * cosA - (lineBottomRy + p.dropDistance) * sinA;
+      p.absoluteY = p.triangleBottomY + p.dropDistance;
+    }
   }
   pop();
-  // --- [ 회전하는 상단 구조물 끝 ] ---
 
-  // 5. 중력에 의해 떨어지는 원 이동 및 수직 착지 처리
+  // --- [ 4. 물체 낙하 물리 ] ---
   for (let i = 0; i < dropPoints.length; i++) {
     let p = dropPoints[i];
 
-    // 중력 가속도 계산
     p.speed += p.gravity;
-    p.dropDistance += p.speed;
 
-    let circleY = p.triangleBottomY + p.dropDistance;
+    if (p.isBouncing) {
+      p.absoluteY += p.speed;
+      p.currentX += p.vx;
+      p.vx *= 0.97;
+    } else {
+      p.dropDistance += p.speed;
+      p.absoluteY = p.triangleBottomY + p.dropDistance;
+    }
 
-    // 떨어지는 원 그리기
+    let circleY = p.absoluteY;
+
+    // 낙하 중인 도형
     fill(p.color);
     noStroke();
-    circle(p.currentX, circleY, 16);
+    drawCalderShape(p.currentX, circleY, 15, p.shapeType);
 
-    // 바닥 착지 조건
-    let diameter = 16;
-    let floorY = height * 0.9 - Math.floor(p.landedCount / 2) * (diameter - 4);
+    if (circleY >= floorBaseY) {
+      p.absoluteY = floorBaseY;
 
-    if (circleY >= floorY) {
-      // 회전 속도와 움직임 방향에 맞춰 옆으로 넓고 자연스럽게 흩뿌려짐
-      let swingImpulse = cos(frameCount * 0.02) * 30; // 회전하는 속도감 반영
-      let bounceX = p.currentX + swingImpulse + random(-30, 30);
-      let bounceY = floorY + random(-4, 4);
+      if (Math.abs(p.speed) > 1.2) {
+        p.speed *= p.bounce;
 
-      landedCircles.push({ x: bounceX, y: bounceY, color: p.color });
-      p.landedCount++;
+        if (!p.isBouncing) {
+          let swingImpulse = cos(frameCount * 0.02) * 3;
+          p.vx = swingImpulse + random(-3, 3);
+          p.isBouncing = true;
+        }
+      } else {
+        let finalRollVx = p.vx + random(-1.5, 1.5);
+        landedBalls.push(
+          new LandedBall(
+            p.currentX,
+            floorBaseY,
+            finalRollVx,
+            p.color,
+            p.shapeType,
+          ),
+        );
 
-      // 원 초기화
-      p.dropDistance = 15;
-      p.speed = 0;
+        p.dropDistance = 15;
+        p.speed = 0;
+        p.vx = 0;
+        p.isBouncing = false;
+      }
     }
   }
 }
