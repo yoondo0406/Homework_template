@@ -1,5 +1,5 @@
 let seeds = [];
-const SEED_COUNT = 2000; // 민들레 홀씨 선 개수
+const SEED_COUNT = 2500; // 민들레 홀씨 선 개수
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
@@ -15,9 +15,7 @@ function windowResized() {
 function initDandelion() {
   seeds = [];
   for (let i = 0; i < SEED_COUNT; i++) {
-    // 360도로 자유롭게 퍼지되 자연스러운 밀도차 부여
     let angle = random(TWO_PI);
-    // 길이 변주를 크게 하여 획일적이지 않게 함
     let length = random(60, 190);
     seeds.push(new Seed(angle, length));
   }
@@ -35,9 +33,9 @@ function draw() {
   strokeWeight(0.5);
   line(cx, cy, cx, height);
 
-  // 마우스를 누르고 있는 동안 약하게 바람 지속 (힘겹게 몇 개씩 떨어짐)
+  // 마우스를 누르고 있는 동안 힘겹게 바람 작용
   if (mouseIsPressed) {
-    applyWind(0.01); // 지속 바람 강도
+    applyWind(0.02);
   }
 
   // 각 선 업데이트 및 그리기
@@ -55,17 +53,16 @@ function draw() {
 
 // 마우스 클릭 시 바람 작용
 function mousePressed() {
-  applyWind(0.35); // 순간적인 바람 강도
+  applyWind(0.1);
 }
 
 // 바람을 주어 조건에 맞는 선만 힘겹게 떨어뜨림
 function applyWind(windForce) {
   for (let seed of seeds) {
     if (!seed.isDetached) {
-      // 저항력을 넘어서야만 겨우 떨어짐
       seed.holdPower -= windForce * random(0.2, 1.5);
       if (seed.holdPower <= 0) {
-        let windAngle = -QUARTER_PI + random(-0.6, 0.6); // 우상향 바람
+        let windAngle = -QUARTER_PI + random(-0.6, 0.6);
         let speed = random(1.5, 4.5);
         let fx = cos(windAngle) * speed;
         let fy = sin(windAngle) * speed;
@@ -98,7 +95,10 @@ class Seed {
     this.opacity = 1.0;
     this.isDead = false;
 
-    // 각 선마다 고유하게 버티는 저항력 (힘겹게 떨어지게 만드는 요소)
+    // 마우스 접근에 의해 스르륵 사라지는 상태 관리
+    this.isEvaporating = false;
+
+    // 고유 저항력
     this.holdPower = random(1.0, 4.5);
 
     this.noiseOffset = random(1000);
@@ -115,7 +115,7 @@ class Seed {
 
   update(windActive) {
     if (!this.isDetached) {
-      // 떨어지기 전: 중앙 고정 및 미세한 자연 유기적 배치
+      // 떨어지기 전: 중앙 고정
       this.centerX = width / 2;
       this.centerY = height / 2;
       this.startX = this.centerX;
@@ -124,7 +124,23 @@ class Seed {
       this.x = this.centerX + cos(this.baseAngle) * this.length;
       this.y = this.centerY + sin(this.baseAngle) * this.length;
     } else {
-      // 떨어진 후: 마우스를 누르고 있을 때 바람 영향 받음
+      // ----------------------------------------------------
+      // [추가된 신규 기능] 마우스 접근 감지 및 스르륵 소멸
+      // ----------------------------------------------------
+      let distToHead = dist(this.x, this.y, mouseX, mouseY);
+      let distToTail = dist(this.startX, this.startY, mouseX, mouseY);
+
+      // 마우스 커서가 선의 끝점이나 시작점에 45px 이하로 가까워지면 증발 시작
+      if (distToHead < 45 || distToTail < 10) {
+        this.isEvaporating = true;
+      }
+
+      if (this.isEvaporating) {
+        this.opacity -= 0.04; // 마우스 근처에 다가가면 빠르게 스르륵 소멸
+        this.vy -= 0.1; // 약간 위로 피어오르며 사라지는 연출
+      }
+
+      // 떨어진 후: 바람 및 물리 법칙 적용
       if (windActive) {
         let dx = this.x - mouseX;
         let dy = this.y - mouseY;
@@ -134,11 +150,11 @@ class Seed {
         this.vy += (dy / d) * 0.12 - 0.03;
       }
 
-      // 공기 저항 (천천히 나아감)
+      // 공기 저항
       this.vx *= 0.985;
       this.vy *= 0.985;
 
-      // 살랑살랑 바람을 타는 흔들림
+      // 바람을 타는 살랑거림
       this.noiseOffset += 0.015;
       this.vx += (noise(this.noiseOffset) - 0.5) * 0.15;
       this.vy += (noise(this.noiseOffset + 500) - 0.48) * 0.15;
@@ -149,7 +165,12 @@ class Seed {
       this.startX += this.vx;
       this.startY += this.vy;
 
-      // [소멸 조건 1] 화면 밖으로 벗어나면 즉시 제거
+      // [소멸 조건 1] 마우스 접근으로 투명도가 0이 되면 제거
+      if (this.opacity <= 0) {
+        this.isDead = true;
+      }
+
+      // [소멸 조건 2] 화면 밖으로 벗어나면 제거
       if (
         this.x < -80 ||
         this.x > width + 80 ||
@@ -159,14 +180,11 @@ class Seed {
         this.isDead = true;
       }
 
-      // [소멸 조건 2] 바닥에 떨어지면 천천히 사라짐
+      // [소멸 조건 3] 바닥에 떨어지면 천천히 사라짐
       if (this.y >= height - 5 || this.startY >= height - 5) {
         this.vx *= 0.4;
         this.vy = 0;
         this.opacity -= 0.02;
-        if (this.opacity <= 0) {
-          this.isDead = true;
-        }
       }
     }
   }
@@ -178,9 +196,9 @@ class Seed {
     let cd = this.colorData;
     noFill();
     stroke(cd.h, cd.s, cd.b, cd.a * this.opacity);
-    strokeWeight(0.5); // 아주 가늘고 섬세한 선
+    strokeWeight(0.5);
 
-    // 곡선적인 느낌을 살리기 위해 중간에 자연스러운 곡률(Control Point) 부여
+    // 자연스러운 곡률 부여
     let midX = (this.startX + this.x) / 2 + cos(this.baseAngle + PI / 2) * 4;
     let midY = (this.startY + this.y) / 2 + sin(this.baseAngle + PI / 2) * 4;
 
@@ -199,7 +217,7 @@ function getRandomColorData() {
     return { h: 0, s: 0, b: 100, a: 0.85 }; // Pure White
   } else {
     return {
-      h: random(180, 215), // 하늘색 톤 변주
+      h: random(180, 215), // 하늘색 톤
       s: random(15, 45),
       b: random(85, 100),
       a: random(0.6, 0.95),
