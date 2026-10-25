@@ -52,7 +52,7 @@ const beadPalette = [
   { r: 254, g: 200, b: 216, name: "Blush" },
 ];
 
-// 🎵 Web Audio API (사운드 효과 시스템)
+// Web Audio API (사운드 시스템)
 let audioCtx = null;
 
 function unlockAudio() {
@@ -115,6 +115,8 @@ function playShatterSound() {
 function setup() {
   canvas = createCanvas(canvasWidth, canvasHeight);
   canvas.parent("canvas-container");
+
+  setupCanvasEvents();
   setupUIEvents();
 
   for (let i = 0; i < 50; i++) {
@@ -160,17 +162,17 @@ function draw() {
   let activeX = touches.length > 0 ? touches[0].x : mouseX;
   let activeY = touches.length > 0 ? touches[0].y : mouseY;
 
-  if (isDragging && dragStart) {
+  if (isDragging && dragStart && dragCurrent) {
     stroke(255, 255, 255, 180);
     strokeWeight(2);
     drawingContext.setLineDash([4, 4]);
-    line(dragStart.x, dragStart.y, dragStart.x, activeY);
+    line(dragStart.x, dragStart.y, dragStart.x, dragCurrent.y);
     drawingContext.setLineDash([]);
 
     fill(255, 255, 255, 220);
     noStroke();
     circle(dragStart.x, dragStart.y, 7);
-    circle(dragStart.x, activeY, 7);
+    circle(dragStart.x, dragCurrent.y, 7);
   }
 
   for (let i = threads.length - 1; i >= 0; i--) {
@@ -225,6 +227,7 @@ function draw() {
     if (p.isDead()) particles.splice(i, 1);
   }
 
+  // ✂️ 가위 모드: 아이패드에서는 두 손가락(touches.length >= 2), 노트북에서는 스페이스바
   if (touches.length >= 2 && !isModalOpen()) {
     let scissorX = touches[1].x;
     let scissorY = touches[1].y;
@@ -311,7 +314,7 @@ function removeBeadFromStorage(beadObj) {
 }
 
 // ----------------------------------------------------
-// 이벤트 핸들링 (아이패드 터치 100% 안정화)
+// 캔버스 직접 이벤트 바인딩 (아이패드 터치 & 두 손가락 가위 완벽 대응)
 // ----------------------------------------------------
 window.addEventListener("keydown", (e) => {
   unlockAudio();
@@ -326,46 +329,100 @@ window.addEventListener("keyup", (e) => {
   if (e.code === "Space") isSpacePressed = false;
 });
 
-function mousePressed() {
-  if (isModalOpen()) return;
-  if (millis() - lastTouchTime < 300) return;
-  unlockAudio();
-  handlePress(mouseX, mouseY);
-}
+function setupCanvasEvents() {
+  if (!canvas || !canvas.elt) return;
+  let el = canvas.elt;
 
-function getCanvasTouchPos(event) {
-  if (event.touches && event.touches.length > 0 && canvas && canvas.elt) {
-    let rect = canvas.elt.getBoundingClientRect();
-    return {
-      x: event.touches[0].clientX - rect.left,
-      y: event.touches[0].clientY - rect.top,
-    };
-  }
-  return { x: mouseX, y: mouseY };
-}
+  el.addEventListener(
+    "touchstart",
+    (e) => {
+      if (isModalOpen()) return;
+      lastTouchTime = millis();
+      unlockAudio();
+      e.preventDefault();
 
-function touchStarted(event) {
-  if (isModalOpen()) return true;
-  lastTouchTime = millis();
-  unlockAudio();
+      // 두 손가락 이상일 때는 가위 모드이므로 일반 터치 액션 무시
+      if (e.touches.length >= 2) return;
 
-  let pos = getCanvasTouchPos(event);
-  let tx = pos.x;
-  let ty = pos.y;
+      let touch = e.touches[0];
+      let rect = el.getBoundingClientRect();
+      let tx = touch.clientX - rect.left;
+      let ty = touch.clientY - rect.top;
 
-  for (let t of threads) {
-    for (let b of t.beads) {
-      if (b.contains(tx, ty)) {
-        targetBeadToHold = b;
-        pressStartTime = millis();
-        isLongPressTriggered = false;
-        return false;
+      for (let t of threads) {
+        for (let b of t.beads) {
+          if (b.contains(tx, ty)) {
+            targetBeadToHold = b;
+            pressStartTime = millis();
+            isLongPressTriggered = false;
+            return;
+          }
+        }
       }
-    }
-  }
 
-  handlePress(tx, ty);
-  return false;
+      handlePress(tx, ty);
+    },
+    { passive: false },
+  );
+
+  el.addEventListener(
+    "touchmove",
+    (e) => {
+      if (isModalOpen()) return;
+      lastTouchTime = millis();
+      e.preventDefault();
+
+      if (e.touches.length >= 2) return; // 두 손가락 움직임은 draw() 안에서 가위로 처리
+
+      let touch = e.touches[0];
+      let rect = el.getBoundingClientRect();
+      let activeX = touch.clientX - rect.left;
+      let activeY = touch.clientY - rect.top;
+
+      if (
+        targetBeadToHold &&
+        dist(activeX, activeY, targetBeadToHold.x, targetBeadToHold.y) > 15
+      ) {
+        targetBeadToHold = null;
+      }
+
+      if (isDragging && dragStart) {
+        dragCurrent.x = activeX;
+        dragCurrent.y = activeY;
+      }
+    },
+    { passive: false },
+  );
+
+  el.addEventListener("touchend", (e) => {
+    if (isModalOpen()) return;
+    lastTouchTime = millis();
+    targetBeadToHold = null;
+    handleRelease();
+  });
+
+  el.addEventListener("mousedown", (e) => {
+    if (isModalOpen()) return;
+    if (millis() - lastTouchTime < 300) return;
+    unlockAudio();
+    let rect = el.getBoundingClientRect();
+    handlePress(e.clientX - rect.left, e.clientY - rect.top);
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    if (isModalOpen()) return;
+    if (isDragging && dragStart && canvas && canvas.elt) {
+      let rect = canvas.elt.getBoundingClientRect();
+      dragCurrent.x = e.clientX - rect.left;
+      dragCurrent.y = e.clientY - rect.top;
+    }
+  });
+
+  window.addEventListener("mouseup", (e) => {
+    if (isModalOpen()) return;
+    targetBeadToHold = null;
+    handleRelease();
+  });
 }
 
 function handlePress(px, py) {
@@ -412,52 +469,8 @@ function handlePress(px, py) {
   dragCurrent = createVector(px, py);
 }
 
-function mouseDragged() {
-  if (isModalOpen()) return;
-  if (isDragging && dragStart) {
-    dragCurrent.x = mouseX;
-    dragCurrent.y = mouseY;
-  }
-}
-
-function touchMoved(event) {
-  if (isModalOpen()) return true;
-  lastTouchTime = millis();
-
-  let pos = getCanvasTouchPos(event);
-  let activeX = pos.x;
-  let activeY = pos.y;
-
-  if (
-    targetBeadToHold &&
-    dist(activeX, activeY, targetBeadToHold.x, targetBeadToHold.y) > 15
-  ) {
-    targetBeadToHold = null;
-  }
-
-  if (isDragging && dragStart) {
-    dragCurrent.x = activeX;
-    dragCurrent.y = activeY;
-  }
-  return false;
-}
-
-function mouseReleased() {
-  if (isModalOpen()) return;
-  targetBeadToHold = null;
-  handleRelease();
-}
-
-function touchEnded(event) {
-  if (isModalOpen()) return true;
-  lastTouchTime = millis();
-  targetBeadToHold = null;
-  handleRelease();
-  return false;
-}
-
 function handleRelease() {
-  let activeY = touches.length > 0 ? touches[0].y : mouseY;
+  let activeY = dragCurrent ? dragCurrent.y : dragStart ? dragStart.y : 0;
   if (isDragging && dragStart) {
     let len = dist(dragStart.x, dragStart.y, dragStart.x, activeY);
     if (len > 25) {
@@ -472,7 +485,7 @@ function handleRelease() {
 }
 
 // ----------------------------------------------------
-// 클래스들 (AmbientParticle, Thread, Bead, 파티클 등 기존 동일)
+// 클래스들 (AmbientParticle, Thread, Bead, 파티클 등)
 // ----------------------------------------------------
 class AmbientParticle {
   constructor() {
