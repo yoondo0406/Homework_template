@@ -4,7 +4,7 @@ let fallingThreads = [];
 let ambientParticles = [];
 let floorStardust = [];
 
-let canvas; // 캔버스 객체 전역 저장 (아이패드 좌표 계산 및 메모리 보호용)
+let canvas;
 let canvasWidth = window.innerWidth;
 let canvasHeight = window.innerHeight;
 
@@ -20,10 +20,8 @@ let uploadedImgData = null;
 let prevMouseX = 0;
 let prevMouseY = 0;
 let mouseSpeed = 0;
-
 let lastTouchTime = 0;
 
-// 롱클릭(오래 누르고 있으면 비즈 파괴) 감지용
 let pressStartTime = 0;
 let targetBeadToHold = null;
 let isLongPressTriggered = false;
@@ -54,7 +52,7 @@ const beadPalette = [
   { r: 254, g: 200, b: 216, name: "Blush" },
 ];
 
-// Web Audio API (아이패드/모바일 완벽 대응 언락 함수 포함)
+// 🎵 Web Audio API (사운드 효과 시스템)
 let audioCtx = null;
 
 function unlockAudio() {
@@ -115,11 +113,11 @@ function playShatterSound() {
 }
 
 function setup() {
-  canvas = createCanvas(canvasWidth, canvasHeight); // 전역 변수 canvas에 저장
+  canvas = createCanvas(canvasWidth, canvasHeight);
   canvas.parent("canvas-container");
   setupUIEvents();
 
-  for (let i = 0; i < 65; i++) {
+  for (let i = 0; i < 50; i++) {
     ambientParticles.push(new AmbientParticle());
   }
 
@@ -133,6 +131,12 @@ function setup() {
     once: true,
     passive: true,
   });
+}
+
+function windowResized() {
+  canvasWidth = window.innerWidth;
+  canvasHeight = window.innerHeight;
+  resizeCanvas(canvasWidth, canvasHeight);
 }
 
 function draw() {
@@ -211,18 +215,14 @@ function draw() {
     let ft = fallingThreads[i];
     ft.update();
     ft.display();
-    if (ft.isDead()) {
-      fallingThreads.splice(i, 1);
-    }
+    if (ft.isDead()) fallingThreads.splice(i, 1);
   }
 
   for (let i = particles.length - 1; i >= 0; i--) {
     let p = particles[i];
     p.update();
     p.display();
-    if (p.isDead()) {
-      particles.splice(i, 1);
-    }
+    if (p.isDead()) particles.splice(i, 1);
   }
 
   if (touches.length >= 2 && !isModalOpen()) {
@@ -251,7 +251,7 @@ function draw() {
 }
 
 // ----------------------------------------------------
-// 로컬 스토리지 보관함 (가로 확장 폭 유지 연동)
+// LocalStorage
 // ----------------------------------------------------
 function saveDataToLocalStorage() {
   let dataToSave = threads.map((t) => ({
@@ -270,24 +270,9 @@ function saveDataToLocalStorage() {
     })),
   }));
   localStorage.setItem("threading_for_me_threads", JSON.stringify(dataToSave));
-  localStorage.setItem("threading_for_me_canvas_width", canvasWidth);
 }
 
 function loadDataFromLocalStorage() {
-  let savedWidth = localStorage.getItem("threading_for_me_canvas_width");
-  if (savedWidth) {
-    canvasWidth = parseInt(savedWidth);
-    if (canvasWidth < window.innerWidth) canvasWidth = window.innerWidth;
-    if (canvasWidth > 4800) canvasWidth = 4800; // 최대 폭 안전장치
-    resizeCanvas(canvasWidth, canvasHeight);
-
-    let container = document.getElementById("canvas-container");
-    if (container) {
-      container.style.width = canvasWidth + "px";
-      container.style.minWidth = canvasWidth + "px";
-    }
-  }
-
   let savedData = localStorage.getItem("threading_for_me_threads");
   if (savedData) {
     try {
@@ -326,7 +311,7 @@ function removeBeadFromStorage(beadObj) {
 }
 
 // ----------------------------------------------------
-// 이벤트 핸들링 (아이패드 사파리 좌표 및 스크롤 완벽 대응)
+// 이벤트 핸들링 (아이패드 터치 100% 안정화)
 // ----------------------------------------------------
 window.addEventListener("keydown", (e) => {
   unlockAudio();
@@ -338,9 +323,7 @@ window.addEventListener("keydown", (e) => {
 });
 
 window.addEventListener("keyup", (e) => {
-  if (e.code === "Space") {
-    isSpacePressed = false;
-  }
+  if (e.code === "Space") isSpacePressed = false;
 });
 
 function mousePressed() {
@@ -350,7 +333,6 @@ function mousePressed() {
   handlePress(mouseX, mouseY);
 }
 
-// 캔버스 상대 좌표를 정확히 계산하는 함수 (스크롤된 위치 반영)
 function getCanvasTouchPos(event) {
   if (event.touches && event.touches.length > 0 && canvas && canvas.elt) {
     let rect = canvas.elt.getBoundingClientRect();
@@ -364,7 +346,6 @@ function getCanvasTouchPos(event) {
 
 function touchStarted(event) {
   if (isModalOpen()) return true;
-
   lastTouchTime = millis();
   unlockAudio();
 
@@ -384,7 +365,7 @@ function touchStarted(event) {
   }
 
   handlePress(tx, ty);
-  return false; // 모바일 사파리 기본 스크롤/줌 방지 및 터치 독점
+  return false;
 }
 
 function handlePress(px, py) {
@@ -491,7 +472,7 @@ function handleRelease() {
 }
 
 // ----------------------------------------------------
-// AmbientParticle
+// 클래스들 (AmbientParticle, Thread, Bead, 파티클 등 기존 동일)
 // ----------------------------------------------------
 class AmbientParticle {
   constructor() {
@@ -503,17 +484,14 @@ class AmbientParticle {
     this.alpha = random(30, 120);
     this.pulse = random(TWO_PI);
   }
-
   update() {
     this.x += this.vx;
     this.y += this.vy;
     this.pulse += 0.02;
-
     if (this.y < 0) this.y = canvasHeight;
     if (this.x < 0) this.x = canvasWidth;
     if (this.x > canvasWidth) this.x = 0;
   }
-
   display() {
     noStroke();
     let a = this.alpha + sin(this.pulse) * 20;
@@ -522,19 +500,14 @@ class AmbientParticle {
   }
 }
 
-// ----------------------------------------------------
-// Thread 클래스
-// ----------------------------------------------------
 class Thread {
   constructor(x, topY, bottomY, recipient) {
     this.x = x;
     this.topY = topY;
     this.bottomY = bottomY;
     this.recipient = recipient;
-
     this.color = getUniqueThreadColor();
     this.beads = [];
-
     this.segments = 24;
     this.nodes = [];
     let segLen = (this.bottomY - this.topY) / this.segments;
@@ -549,16 +522,12 @@ class Thread {
     this.waveOffset = random(100);
     this.wasTouched = false;
   }
-
   update() {
     if (isModalOpen()) return;
-
     this.waveOffset += 0.01;
     let windWave = sin(frameCount * 0.01 + this.waveOffset) * 0.1;
-
     let activeX = touches.length > 0 ? touches[0].x : mouseX;
     let activeY = touches.length > 0 ? touches[0].y : mouseY;
-
     let d = dist(activeX, activeY, this.x, activeY);
     let isTouching = activeY >= this.topY && activeY <= this.bottomY && d < 45;
 
@@ -566,7 +535,6 @@ class Thread {
       let pushForce = map(d, 0, 45, 1.2, 0);
       let dir = activeX > this.x ? -1 : 1;
       let hitNormY = map(activeY, this.topY, this.bottomY, 0, 1);
-
       for (let i = 1; i < this.segments; i++) {
         let nodeNormY = i / this.segments;
         let distFromHit = abs(nodeNormY - hitNormY);
@@ -574,7 +542,6 @@ class Thread {
           exp(-distFromHit * 6.0) * sin(distFromHit * 8.0 - frameCount * 0.1);
         this.nodes[i].vx += dir * pushForce * waveFactor * 0.3;
       }
-
       if (
         !this.wasTouched &&
         (mouseSpeed > 1.2 || abs(activeX - prevMouseX) > 0.8)
@@ -590,12 +557,9 @@ class Thread {
       let n = this.nodes[i];
       let nodeNorm = i / this.segments;
       let targetX = n.targetX + windWave * sin(nodeNorm * PI);
-
       let forceX = (targetX - n.x) * 0.03;
-
       if (i > 1) forceX += (this.nodes[i - 1].x - n.x) * 0.06;
       if (i < this.segments - 1) forceX += (this.nodes[i + 1].x - n.x) * 0.06;
-
       n.vx += forceX;
       n.vx *= 0.8;
       n.x += n.vx;
@@ -607,18 +571,14 @@ class Thread {
       let i1 = floor(idx);
       let i2 = min(i1 + 1, this.segments);
       let amt = idx - i1;
-
       i1 = constrain(i1, 0, this.segments);
       i2 = constrain(i2, 0, this.segments);
-
       let currentX = lerp(this.nodes[i1].x, this.nodes[i2].x, amt);
       b.update(currentX);
     }
   }
-
   display() {
     noFill();
-
     stroke(0, 0, 0, 120);
     strokeWeight(3.5);
     beginShape();
@@ -635,14 +595,6 @@ class Thread {
     curveVertex(this.nodes[this.segments].x, this.nodes[this.segments].y);
     endShape();
 
-    stroke(255, 255, 255, 100);
-    strokeWeight(1);
-    beginShape();
-    curveVertex(this.nodes[0].x, this.nodes[0].y);
-    for (let n of this.nodes) curveVertex(n.x - 0.8, n.y);
-    curveVertex(this.nodes[this.segments].x, this.nodes[this.segments].y);
-    endShape();
-
     fill(255, 180);
     noStroke();
     circle(this.nodes[0].x, this.nodes[0].y, 5);
@@ -653,16 +605,11 @@ class Thread {
     textAlign(CENTER, BOTTOM);
     text(this.recipient, this.nodes[0].x, this.topY - 8);
 
-    for (let b of this.beads) {
-      b.display();
-    }
+    for (let b of this.beads) b.display();
   }
-
   addBead(content, imgData, dateStr) {
     let targetY = this.bottomY - this.beads.length * 32 - 18;
-    if (targetY < this.topY + 20) {
-      targetY = this.topY + 20;
-    }
+    if (targetY < this.topY + 20) targetY = this.topY + 20;
     let newBead = new Bead(
       this.x,
       this.topY,
@@ -675,7 +622,6 @@ class Thread {
     saveDataToLocalStorage();
     playBeadSound();
   }
-
   isClicked(mx, my) {
     return (
       mx >= this.x - 16 &&
@@ -684,48 +630,30 @@ class Thread {
       my <= this.bottomY
     );
   }
-
   checkCut(mx, my) {
-    if (abs(mx - this.x) < 25 && my >= this.topY && my <= this.bottomY) {
+    if (abs(mx - this.x) < 25 && my >= this.topY && my <= this.bottomY)
       return my;
-    }
     return null;
   }
-
   cutAt(cutY) {
-    let topNodes = [];
-    let bottomNodes = [];
-
+    let topNodes = [],
+      bottomNodes = [];
     for (let n of this.nodes) {
-      if (n.y <= cutY) {
-        topNodes.push({ x: n.x, y: n.y });
-      } else {
-        bottomNodes.push({ x: n.x, y: n.y });
-      }
+      if (n.y <= cutY) topNodes.push({ x: n.x, y: n.y });
+      else bottomNodes.push({ x: n.x, y: n.y });
     }
-
-    if (topNodes.length > 0) {
+    if (topNodes.length > 0)
       fallingThreads.push(new FallingThreadSegment(topNodes, this.color, true));
-    }
-    if (bottomNodes.length > 0) {
+    if (bottomNodes.length > 0)
       fallingThreads.push(
         new FallingThreadSegment(bottomNodes, this.color, false),
       );
-    }
-
-    for (let b of this.beads) {
-      b.detachAndFall();
-    }
-
-    for (let i = 0; i < 12; i++) {
+    for (let b of this.beads) b.detachAndFall();
+    for (let i = 0; i < 12; i++)
       particles.push(new ThreadSparkParticle(this.x, cutY, this.color));
-    }
   }
 }
 
-// ----------------------------------------------------
-// FallingThreadSegment
-// ----------------------------------------------------
 class FallingThreadSegment {
   constructor(nodes, color, isTopFixed) {
     this.nodes = nodes.map((n) => ({
@@ -739,17 +667,14 @@ class FallingThreadSegment {
     this.alpha = 255;
     this.gravity = 0.25;
   }
-
   update() {
     this.alpha -= 2.5;
     for (let i = 0; i < this.nodes.length; i++) {
       let n = this.nodes[i];
       if (this.isTopFixed && i === 0) continue;
-
       n.vy += this.gravity;
       n.x += n.vx;
       n.y += n.vy;
-
       if (n.y >= canvasHeight - 5) {
         n.y = canvasHeight - 5;
         n.vx *= 0.6;
@@ -757,7 +682,6 @@ class FallingThreadSegment {
       }
     }
   }
-
   display() {
     noFill();
     let c = color(this.color);
@@ -768,15 +692,11 @@ class FallingThreadSegment {
     for (let n of this.nodes) vertex(n.x, n.y);
     endShape();
   }
-
   isDead() {
     return this.alpha <= 0;
   }
 }
 
-// ----------------------------------------------------
-// Bead 클래스
-// ----------------------------------------------------
 class Bead {
   constructor(x, startY, targetY, content, imgData, dateStr) {
     this.x = x;
@@ -785,22 +705,17 @@ class Bead {
     this.content = content;
     this.imgData = imgData;
     this.dateStr = dateStr;
-
     this.radius = random(13, 17);
     this.palette = random(beadPalette);
-
     this.vy = 0;
     this.gravity = 0.35;
     this.bounce = -0.3;
     this.isAttached = true;
-
     this.vx = 0;
     this.rot = random(TWO_PI);
     this.vRot = 0;
-
     this.isHovered = false;
   }
-
   update(currentX) {
     if (this.isAttached) {
       this.x = currentX;
@@ -820,12 +735,8 @@ class Bead {
       this.x += this.vx;
       this.y += this.vy;
       this.rot += this.vRot;
-
-      if (this.y >= canvasHeight - this.radius) {
-        this.shatter();
-      }
+      if (this.y >= canvasHeight - this.radius) this.shatter();
     }
-
     let activeX = touches.length > 0 ? touches[0].x : mouseX;
     let activeY = touches.length > 0 ? touches[0].y : mouseY;
     this.isHovered =
@@ -834,16 +745,12 @@ class Bead {
       touches.length < 2 &&
       !isModalOpen();
   }
-
   display() {
     push();
     translate(this.x, this.y);
     rotate(this.rot);
-
     let displayRadius = this.radius;
-    if (this.isHovered) {
-      displayRadius *= 1.25;
-    }
+    if (this.isHovered) displayRadius *= 1.25;
 
     let ctx = drawingContext;
     ctx.save();
@@ -864,57 +771,44 @@ class Bead {
       1,
       `rgba(${this.palette.r}, ${this.palette.g}, ${this.palette.b}, 0.25)`,
     );
-
     ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.arc(0, 0, displayRadius, 0, TWO_PI);
     ctx.fill();
-
     ctx.strokeStyle = `rgba(255, 255, 255, 0.5)`;
     ctx.lineWidth = this.isHovered ? 2 : 1;
     ctx.stroke();
     ctx.restore();
-
     pop();
   }
-
   contains(mx, my) {
     return dist(mx, my, this.x, this.y) < this.radius + 22;
   }
-
   detachAndFall() {
     this.isAttached = false;
     this.vx = random(-2.5, 2.5);
     this.vy = random(-2, 1);
     this.vRot = random(-0.1, 0.1);
   }
-
   shatter() {
     let count = floor(random(10, 16));
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < count; i++)
       particles.push(
         new GlassShardParticle(this.x, canvasHeight - 5, this.palette),
       );
-    }
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 3; i++)
       floorStardust.push(
         new FloorStardust(this.x + random(-15, 15), this.palette),
       );
-    }
     playShatterSound();
     this.y = canvasHeight + 999;
   }
-
   triggerReadAnimation() {
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 6; i++)
       particles.push(new DustParticle(this.x, this.y));
-    }
   }
 }
 
-// ----------------------------------------------------
-// FloorStardust
-// ----------------------------------------------------
 class FloorStardust {
   constructor(x, palette) {
     this.x = x;
@@ -923,7 +817,6 @@ class FloorStardust {
     this.palette = palette;
     this.alpha = random(80, 150);
   }
-
   display() {
     noStroke();
     fill(
@@ -936,9 +829,6 @@ class FloorStardust {
   }
 }
 
-// ----------------------------------------------------
-// 파티클 클래스들
-// ----------------------------------------------------
 class GlassShardParticle {
   constructor(x, y, palette) {
     this.x = x;
@@ -952,20 +842,17 @@ class GlassShardParticle {
     this.alpha = 255;
     this.palette = palette;
   }
-
   update() {
     this.vy += this.gravity;
     this.x += this.vx;
     this.y += this.vy;
     this.rot += this.vRot;
     this.alpha -= 4;
-
     if (this.y >= canvasHeight - 2) {
       this.y = canvasHeight - 2;
       this.vx *= 0.5;
     }
   }
-
   display() {
     push();
     translate(this.x, this.y);
@@ -987,7 +874,6 @@ class GlassShardParticle {
     );
     pop();
   }
-
   isDead() {
     return this.alpha <= 0;
   }
@@ -1003,13 +889,11 @@ class ThreadSparkParticle {
     this.color = col;
     this.size = random(2, 4);
   }
-
   update() {
     this.x += this.vx;
     this.y += this.vy;
     this.alpha -= 6;
   }
-
   display() {
     noStroke();
     let c = color(this.color);
@@ -1017,7 +901,6 @@ class ThreadSparkParticle {
     fill(c);
     circle(this.x, this.y, this.size);
   }
-
   isDead() {
     return this.alpha <= 0;
   }
@@ -1032,26 +915,23 @@ class DustParticle {
     this.alpha = 180;
     this.size = random(1.5, 3);
   }
-
   update() {
     this.x += this.vx;
     this.y += this.vy;
     this.alpha -= 3;
   }
-
   display() {
     noStroke();
     fill(255, 255, 255, this.alpha);
     circle(this.x, this.y, this.size);
   }
-
   isDead() {
     return this.alpha <= 0;
   }
 }
 
 // ----------------------------------------------------
-// UI 헬퍼 및 이벤트 (최대 폭 확장 제한 및 안전장치 포함)
+// UI 및 모달 이벤트
 // ----------------------------------------------------
 function drawScissorsCursor(x, y) {
   push();
@@ -1076,25 +956,6 @@ function getUniqueThreadColor() {
 let mediaStream = null;
 
 function setupUIEvents() {
-  document.getElementById("expand-space-btn").onclick = () => {
-    unlockAudio();
-
-    // 아이패드 메모리 보호 및 흰 화면 방지 (최대 4800px 제한)
-    if (canvasWidth < 4800) {
-      canvasWidth += 600;
-      resizeCanvas(canvasWidth, canvasHeight);
-      localStorage.setItem("threading_for_me_canvas_width", canvasWidth);
-
-      let container = document.getElementById("canvas-container");
-      if (container) {
-        container.style.width = canvasWidth + "px";
-        container.style.minWidth = canvasWidth + "px";
-      }
-    }
-
-    window.scrollTo({ left: canvasWidth, behavior: "smooth" });
-  };
-
   document.getElementById("cancel-name-btn").onclick = closeNameModal;
   document.getElementById("save-name-btn").onclick = confirmNameModal;
 
@@ -1133,7 +994,7 @@ function setupUIEvents() {
       });
       videoElem.srcObject = mediaStream;
     } catch (err) {
-      alert("카메라 권한을 허용해 주세요. (HTTPS 환경인지 확인해주세요)");
+      alert("카메라 권한을 확인해주세요.");
       cameraModal.classList.add("hidden");
     }
   };
@@ -1203,7 +1064,6 @@ function confirmNameModal() {
 function openWriteModal(recipient) {
   document.getElementById("write-modal-title").innerText =
     `${recipient}에게 남기는 편지`;
-
   let now = new Date();
   let dateStr = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, "0")}.${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
   document.getElementById("write-modal-date").innerText = dateStr;
@@ -1223,7 +1083,6 @@ function closeWriteModal() {
 function confirmWriteModal() {
   let text = document.getElementById("letter-text-input").value.trim();
   if (!text && !uploadedImgData) return;
-
   let dateStr = document.getElementById("write-modal-date").innerText;
   if (currentSelectedThread) {
     currentSelectedThread.addBead(text, uploadedImgData, dateStr);
@@ -1246,7 +1105,6 @@ function openReadModal(bead, recipient) {
   } else {
     imgContainer.classList.add("hidden");
   }
-
   document.getElementById("read-modal").classList.remove("hidden");
 }
 
