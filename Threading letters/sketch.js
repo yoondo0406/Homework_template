@@ -4,6 +4,7 @@ let fallingThreads = [];
 let ambientParticles = [];
 let floorStardust = [];
 
+let canvas; // 캔버스 객체 전역 저장 (아이패드 좌표 계산 및 메모리 보호용)
 let canvasWidth = window.innerWidth;
 let canvasHeight = window.innerHeight;
 
@@ -114,7 +115,7 @@ function playShatterSound() {
 }
 
 function setup() {
-  let canvas = createCanvas(canvasWidth, canvasHeight);
+  canvas = createCanvas(canvasWidth, canvasHeight); // 전역 변수 canvas에 저장
   canvas.parent("canvas-container");
   setupUIEvents();
 
@@ -277,6 +278,7 @@ function loadDataFromLocalStorage() {
   if (savedWidth) {
     canvasWidth = parseInt(savedWidth);
     if (canvasWidth < window.innerWidth) canvasWidth = window.innerWidth;
+    if (canvasWidth > 4800) canvasWidth = 4800; // 최대 폭 안전장치
     resizeCanvas(canvasWidth, canvasHeight);
 
     let container = document.getElementById("canvas-container");
@@ -324,7 +326,7 @@ function removeBeadFromStorage(beadObj) {
 }
 
 // ----------------------------------------------------
-// 이벤트 핸들링 (가로 스크롤 및 아이패드 좌표 완벽 대응 버전)
+// 이벤트 핸들링 (아이패드 사파리 좌표 및 스크롤 완벽 대응)
 // ----------------------------------------------------
 window.addEventListener("keydown", (e) => {
   unlockAudio();
@@ -348,11 +350,10 @@ function mousePressed() {
   handlePress(mouseX, mouseY);
 }
 
-// 캔버스 상대 좌표를 정확히 계산하는 헬퍼 함수
+// 캔버스 상대 좌표를 정확히 계산하는 함수 (스크롤된 위치 반영)
 function getCanvasTouchPos(event) {
-  let canvasElem = document.querySelector("canvas");
-  if (event.touches && event.touches.length > 0 && canvasElem) {
-    let rect = canvasElem.getBoundingClientRect();
+  if (event.touches && event.touches.length > 0 && canvas && canvas.elt) {
+    let rect = canvas.elt.getBoundingClientRect();
     return {
       x: event.touches[0].clientX - rect.left,
       y: event.touches[0].clientY - rect.top,
@@ -473,6 +474,54 @@ function touchEnded(event) {
   handleRelease();
   return false;
 }
+
+function handleRelease() {
+  let activeY = touches.length > 0 ? touches[0].y : mouseY;
+  if (isDragging && dragStart) {
+    let len = dist(dragStart.x, dragStart.y, dragStart.x, activeY);
+    if (len > 25) {
+      let topY = min(dragStart.y, activeY);
+      let bottomY = max(dragStart.y, activeY);
+      openNameModal(dragStart.x, topY, bottomY);
+    }
+  }
+  isDragging = false;
+  dragStart = null;
+  dragCurrent = null;
+}
+
+// ----------------------------------------------------
+// AmbientParticle
+// ----------------------------------------------------
+class AmbientParticle {
+  constructor() {
+    this.x = random(canvasWidth);
+    this.y = random(canvasHeight);
+    this.size = random(1, 3);
+    this.vx = random(-0.2, 0.2);
+    this.vy = random(-0.3, -0.05);
+    this.alpha = random(30, 120);
+    this.pulse = random(TWO_PI);
+  }
+
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.pulse += 0.02;
+
+    if (this.y < 0) this.y = canvasHeight;
+    if (this.x < 0) this.x = canvasWidth;
+    if (this.x > canvasWidth) this.x = 0;
+  }
+
+  display() {
+    noStroke();
+    let a = this.alpha + sin(this.pulse) * 20;
+    fill(255, 255, 255, a);
+    circle(this.x, this.y, this.size);
+  }
+}
+
 // ----------------------------------------------------
 // Thread 클래스
 // ----------------------------------------------------
@@ -1002,7 +1051,7 @@ class DustParticle {
 }
 
 // ----------------------------------------------------
-// UI 헬퍼 및 이벤트 (가로 확장 폭 제어 포함)
+// UI 헬퍼 및 이벤트 (최대 폭 확장 제한 및 안전장치 포함)
 // ----------------------------------------------------
 function drawScissorsCursor(x, y) {
   push();
@@ -1029,18 +1078,20 @@ let mediaStream = null;
 function setupUIEvents() {
   document.getElementById("expand-space-btn").onclick = () => {
     unlockAudio();
-    canvasWidth += 600; // 확장 버튼 누를 때마다 600px씩 증가
-    resizeCanvas(canvasWidth, canvasHeight);
-    localStorage.setItem("threading_for_me_canvas_width", canvasWidth);
 
-    // 캔버스 컨테이너 가로 폭 강제 확장
-    let container = document.getElementById("canvas-container");
-    if (container) {
-      container.style.width = canvasWidth + "px";
-      container.style.minWidth = canvasWidth + "px";
+    // 아이패드 메모리 보호 및 흰 화면 방지 (최대 4800px 제한)
+    if (canvasWidth < 4800) {
+      canvasWidth += 600;
+      resizeCanvas(canvasWidth, canvasHeight);
+      localStorage.setItem("threading_for_me_canvas_width", canvasWidth);
+
+      let container = document.getElementById("canvas-container");
+      if (container) {
+        container.style.width = canvasWidth + "px";
+        container.style.minWidth = canvasWidth + "px";
+      }
     }
 
-    // 우측 끝으로 스크롤 이동
     window.scrollTo({ left: canvasWidth, behavior: "smooth" });
   };
 
