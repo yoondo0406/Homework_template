@@ -324,7 +324,7 @@ function removeBeadFromStorage(beadObj) {
 }
 
 // ----------------------------------------------------
-// 이벤트 핸들링
+// 이벤트 핸들링 (아이패드 터치 최적화 적용)
 // ----------------------------------------------------
 window.addEventListener("keydown", (e) => {
   unlockAudio();
@@ -369,7 +369,7 @@ function touchStarted() {
   }
 
   handlePress(tx, ty);
-  return false;
+  return false; // 아이패드 터치 충돌 및 기본 스크롤 방지
 }
 
 function handlePress(px, py) {
