@@ -324,7 +324,7 @@ function removeBeadFromStorage(beadObj) {
 }
 
 // ----------------------------------------------------
-// 이벤트 핸들링 (아이패드 터치 최적화 적용)
+// 이벤트 핸들링 (아이패드/모바일 완벽 호환 수정 버전)
 // ----------------------------------------------------
 window.addEventListener("keydown", (e) => {
   unlockAudio();
@@ -348,14 +348,26 @@ function mousePressed() {
   handlePress(mouseX, mouseY);
 }
 
-function touchStarted() {
+// 아이패드 터치 좌표 정확도 확보 및 기본 제스처 충돌 방지
+function touchStarted(event) {
   if (isModalOpen()) return true;
 
   lastTouchTime = millis();
   unlockAudio();
 
-  let tx = touches.length > 0 ? touches[0].x : mouseX;
-  let ty = touches.length > 0 ? touches[0].y : mouseY;
+  // touches 배열이 비어있지 않을 경우 정확한 첫 번째 터치 좌표 사용
+  let tx =
+    event.touches && event.touches.length > 0
+      ? event.touches[0].clientX
+      : touches.length > 0
+        ? touches[0].x
+        : mouseX;
+  let ty =
+    event.touches && event.touches.length > 0
+      ? event.touches[0].clientY
+      : touches.length > 0
+        ? touches[0].y
+        : mouseY;
 
   for (let t of threads) {
     for (let b of t.beads) {
@@ -369,7 +381,7 @@ function touchStarted() {
   }
 
   handlePress(tx, ty);
-  return false; // 아이패드 터치 충돌 및 기본 스크롤 방지
+  return false; // 모바일 사파리 기본 스크롤/줌 방지 및 이벤트 독점
 }
 
 function handlePress(px, py) {
@@ -424,12 +436,22 @@ function mouseDragged() {
   }
 }
 
-function touchMoved() {
+function touchMoved(event) {
   if (isModalOpen()) return true;
   lastTouchTime = millis();
 
-  let activeX = touches.length > 0 ? touches[0].x : mouseX;
-  let activeY = touches.length > 0 ? touches[0].y : mouseY;
+  let activeX =
+    event.touches && event.touches.length > 0
+      ? event.touches[0].clientX
+      : touches.length > 0
+        ? touches[0].x
+        : mouseX;
+  let activeY =
+    event.touches && event.touches.length > 0
+      ? event.touches[0].clientY
+      : touches.length > 0
+        ? touches[0].y
+        : mouseY;
 
   if (
     targetBeadToHold &&
@@ -451,27 +473,12 @@ function mouseReleased() {
   handleRelease();
 }
 
-function touchEnded() {
+function touchEnded(event) {
   if (isModalOpen()) return true;
   lastTouchTime = millis();
   targetBeadToHold = null;
   handleRelease();
   return false;
-}
-
-function handleRelease() {
-  let activeY = touches.length > 0 ? touches[0].y : mouseY;
-  if (isDragging && dragStart) {
-    let len = dist(dragStart.x, dragStart.y, dragStart.x, activeY);
-    if (len > 25) {
-      let topY = min(dragStart.y, activeY);
-      let bottomY = max(dragStart.y, activeY);
-      openNameModal(dragStart.x, topY, bottomY);
-    }
-  }
-  isDragging = false;
-  dragStart = null;
-  dragCurrent = null;
 }
 
 // ----------------------------------------------------
