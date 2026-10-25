@@ -324,7 +324,7 @@ function removeBeadFromStorage(beadObj) {
 }
 
 // ----------------------------------------------------
-// 이벤트 핸들링 (아이패드/모바일 완벽 호환 수정 버전)
+// 이벤트 핸들링 (가로 스크롤 및 아이패드 좌표 완벽 대응 버전)
 // ----------------------------------------------------
 window.addEventListener("keydown", (e) => {
   unlockAudio();
@@ -348,26 +348,28 @@ function mousePressed() {
   handlePress(mouseX, mouseY);
 }
 
-// 아이패드 터치 좌표 정확도 확보 및 기본 제스처 충돌 방지
+// 캔버스 상대 좌표를 정확히 계산하는 헬퍼 함수
+function getCanvasTouchPos(event) {
+  let canvasElem = document.querySelector("canvas");
+  if (event.touches && event.touches.length > 0 && canvasElem) {
+    let rect = canvasElem.getBoundingClientRect();
+    return {
+      x: event.touches[0].clientX - rect.left,
+      y: event.touches[0].clientY - rect.top,
+    };
+  }
+  return { x: mouseX, y: mouseY };
+}
+
 function touchStarted(event) {
   if (isModalOpen()) return true;
 
   lastTouchTime = millis();
   unlockAudio();
 
-  // touches 배열이 비어있지 않을 경우 정확한 첫 번째 터치 좌표 사용
-  let tx =
-    event.touches && event.touches.length > 0
-      ? event.touches[0].clientX
-      : touches.length > 0
-        ? touches[0].x
-        : mouseX;
-  let ty =
-    event.touches && event.touches.length > 0
-      ? event.touches[0].clientY
-      : touches.length > 0
-        ? touches[0].y
-        : mouseY;
+  let pos = getCanvasTouchPos(event);
+  let tx = pos.x;
+  let ty = pos.y;
 
   for (let t of threads) {
     for (let b of t.beads) {
@@ -381,7 +383,7 @@ function touchStarted(event) {
   }
 
   handlePress(tx, ty);
-  return false; // 모바일 사파리 기본 스크롤/줌 방지 및 이벤트 독점
+  return false; // 모바일 사파리 기본 스크롤/줌 방지 및 터치 독점
 }
 
 function handlePress(px, py) {
@@ -440,18 +442,9 @@ function touchMoved(event) {
   if (isModalOpen()) return true;
   lastTouchTime = millis();
 
-  let activeX =
-    event.touches && event.touches.length > 0
-      ? event.touches[0].clientX
-      : touches.length > 0
-        ? touches[0].x
-        : mouseX;
-  let activeY =
-    event.touches && event.touches.length > 0
-      ? event.touches[0].clientY
-      : touches.length > 0
-        ? touches[0].y
-        : mouseY;
+  let pos = getCanvasTouchPos(event);
+  let activeX = pos.x;
+  let activeY = pos.y;
 
   if (
     targetBeadToHold &&
@@ -480,39 +473,6 @@ function touchEnded(event) {
   handleRelease();
   return false;
 }
-
-// ----------------------------------------------------
-// AmbientParticle
-// ----------------------------------------------------
-class AmbientParticle {
-  constructor() {
-    this.x = random(canvasWidth);
-    this.y = random(canvasHeight);
-    this.size = random(1, 3);
-    this.vx = random(-0.2, 0.2);
-    this.vy = random(-0.3, -0.05);
-    this.alpha = random(30, 120);
-    this.pulse = random(TWO_PI);
-  }
-
-  update() {
-    this.x += this.vx;
-    this.y += this.vy;
-    this.pulse += 0.02;
-
-    if (this.y < 0) this.y = canvasHeight;
-    if (this.x < 0) this.x = canvasWidth;
-    if (this.x > canvasWidth) this.x = 0;
-  }
-
-  display() {
-    noStroke();
-    let a = this.alpha + sin(this.pulse) * 20;
-    fill(255, 255, 255, a);
-    circle(this.x, this.y, this.size);
-  }
-}
-
 // ----------------------------------------------------
 // Thread 클래스
 // ----------------------------------------------------
