@@ -25,7 +25,7 @@ let lastTouchTime = 0;
 let pressStartTime = 0;
 let targetBeadToHold = null;
 let isLongPressTriggered = false;
-const LONG_PRESS_DURATION = 800;
+const LONG_PRESS_DURATION = 800; // 0.8초 이상 누르고 있어야 삭제
 
 const threadPalette = [
   "#F4A261",
@@ -188,6 +188,7 @@ function draw() {
     }
   }
 
+  // 롱프레스(꾹 누르기) 시 삭제 원형 애니메이션 처리
   if (targetBeadToHold && !isLongPressTriggered && !isModalOpen()) {
     let elapsed = millis() - pressStartTime;
     if (elapsed >= LONG_PRESS_DURATION) {
@@ -227,7 +228,7 @@ function draw() {
     if (p.isDead()) particles.splice(i, 1);
   }
 
-  // ✂️ 가위 모드: 아이패드에서는 두 손가락(touches.length >= 2), 노트북에서는 스페이스바
+  // ✂️ 가위 모드: 아이패드는 두 손가락, 노트북은 스페이스바
   if (touches.length >= 2 && !isModalOpen()) {
     let scissorX = touches[1].x;
     let scissorY = touches[1].y;
@@ -314,7 +315,7 @@ function removeBeadFromStorage(beadObj) {
 }
 
 // ----------------------------------------------------
-// 캔버스 직접 이벤트 바인딩 (아이패드 터치 & 두 손가락 가위 완벽 대응)
+// 캔버스 직접 이벤트 바인딩 (탭과 꾹 누르기 완벽 분리)
 // ----------------------------------------------------
 window.addEventListener("keydown", (e) => {
   unlockAudio();
@@ -341,7 +342,6 @@ function setupCanvasEvents() {
       unlockAudio();
       e.preventDefault();
 
-      // 두 손가락 이상일 때는 가위 모드이므로 일반 터치 액션 무시
       if (e.touches.length >= 2) return;
 
       let touch = e.touches[0];
@@ -349,6 +349,7 @@ function setupCanvasEvents() {
       let tx = touch.clientX - rect.left;
       let ty = touch.clientY - rect.top;
 
+      // 비즈를 터치한 경우: 바로 삭제 트리거가 아니라 탭/롱프레스 판별을 위해 대상 지정
       for (let t of threads) {
         for (let b of t.beads) {
           if (b.contains(tx, ty)) {
@@ -372,7 +373,7 @@ function setupCanvasEvents() {
       lastTouchTime = millis();
       e.preventDefault();
 
-      if (e.touches.length >= 2) return; // 두 손가락 움직임은 draw() 안에서 가위로 처리
+      if (e.touches.length >= 2) return;
 
       let touch = e.touches[0];
       let rect = el.getBoundingClientRect();
@@ -381,9 +382,9 @@ function setupCanvasEvents() {
 
       if (
         targetBeadToHold &&
-        dist(activeX, activeY, targetBeadToHold.x, targetBeadToHold.y) > 15
+        dist(activeX, activeY, targetBeadToHold.x, targetBeadToHold.y) > 20
       ) {
-        targetBeadToHold = null;
+        targetBeadToHold = null; // 손가락이 빗나가면 롱프레스 취소
       }
 
       if (isDragging && dragStart) {
@@ -397,6 +398,24 @@ function setupCanvasEvents() {
   el.addEventListener("touchend", (e) => {
     if (isModalOpen()) return;
     lastTouchTime = millis();
+
+    // 비즈를 터치했다가 빠르게 떼었을 때 (탭) -> 편지 읽기 모달 오픈!
+    if (targetBeadToHold && !isLongPressTriggered) {
+      let elapsed = millis() - pressStartTime;
+      if (elapsed < LONG_PRESS_DURATION) {
+        let recipient = "누군가";
+        for (let t of threads) {
+          if (t.beads.includes(targetBeadToHold)) {
+            recipient = t.recipient;
+            break;
+          }
+        }
+        playBeadSound();
+        targetBeadToHold.triggerReadAnimation();
+        openReadModal(targetBeadToHold, recipient);
+      }
+    }
+
     targetBeadToHold = null;
     handleRelease();
   });
@@ -406,7 +425,22 @@ function setupCanvasEvents() {
     if (millis() - lastTouchTime < 300) return;
     unlockAudio();
     let rect = el.getBoundingClientRect();
-    handlePress(e.clientX - rect.left, e.clientY - rect.top);
+    let mx = e.clientX - rect.left;
+    let my = e.clientY - rect.top;
+
+    // 데스크톱 마우스 클릭 시 비즈를 누르면 바로 편지 읽기 창 열기
+    for (let t of threads) {
+      for (let b of t.beads) {
+        if (b.contains(mx, my)) {
+          playBeadSound();
+          b.triggerReadAnimation();
+          openReadModal(b, t.recipient);
+          return;
+        }
+      }
+    }
+
+    handlePress(mx, my);
   });
 
   window.addEventListener("mousemove", (e) => {
@@ -441,18 +475,6 @@ function handlePress(px, py) {
       }
     }
     return;
-  }
-
-  for (let t of threads) {
-    for (let b of t.beads) {
-      if (b.contains(px, py)) {
-        playBeadSound();
-        b.triggerReadAnimation();
-        openReadModal(b, t.recipient);
-        targetBeadToHold = null;
-        return;
-      }
-    }
   }
 
   for (let t of threads) {
