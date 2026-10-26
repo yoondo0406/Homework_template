@@ -1,4 +1,4 @@
-let currentRoom = 1; // 현재 방 번호
+let currentRoom = 1;
 let threads = [];
 let particles = [];
 let fallingThreads = [];
@@ -16,7 +16,7 @@ let dragCurrent = null;
 
 let currentSelectedThread = null;
 let currentReadingBead = null;
-let uploadedImgData = null;
+let uploadedImages = [];
 
 let prevMouseX = 0;
 let prevMouseY = 0;
@@ -26,7 +26,7 @@ let lastTouchTime = 0;
 let pressStartTime = 0;
 let targetBeadToHold = null;
 let isLongPressTriggered = false;
-const LONG_PRESS_DURATION = 800; // 0.8초 이상 누르면 삭제
+const LONG_PRESS_DURATION = 800;
 
 const threadPalette = [
   "#F4A261",
@@ -113,13 +113,15 @@ function playShatterSound() {
 }
 
 function setup() {
+  // 💡 레티나 고해상도 선명함을 유지하면서 과부하만 방지
+  pixelDensity(min(window.devicePixelRatio, 2));
   canvas = createCanvas(canvasWidth, canvasHeight);
   canvas.parent("canvas-container");
 
   setupCanvasEvents();
   setupUIEvents();
 
-  for (let i = 0; i < 50; i++) {
+  for (let i = 0; i < 25; i++) {
     ambientParticles.push(new AmbientParticle());
   }
 
@@ -141,10 +143,8 @@ function windowResized() {
   resizeCanvas(canvasWidth, canvasHeight);
 }
 
-// ✦ 방(Room) 전환 함수
 function switchRoom(roomNum) {
   currentRoom = roomNum;
-
   for (let i = 1; i <= 3; i++) {
     let btn = document.getElementById(`room-btn-${i}`);
     if (btn) {
@@ -157,7 +157,6 @@ function switchRoom(roomNum) {
       }
     }
   }
-
   loadDataFromLocalStorage();
   playTone(520, "sine", 0.2, 0.1);
 }
@@ -171,10 +170,7 @@ function draw() {
 
   let hoveringInteractive = false;
 
-  for (let fs of floorStardust) {
-    fs.display();
-  }
-
+  for (let fs of floorStardust) fs.display();
   for (let ap of ambientParticles) {
     ap.update();
     ap.display();
@@ -209,7 +205,6 @@ function draw() {
     }
   }
 
-  // 롱프레스(꾹 누르기) 시 삭제 원형 애니메이션 처리 (마우스 & 터치 공통)
   if (targetBeadToHold && !isLongPressTriggered && !isModalOpen()) {
     let elapsed = millis() - pressStartTime;
     if (elapsed >= LONG_PRESS_DURATION) {
@@ -275,7 +270,7 @@ function draw() {
 }
 
 // ----------------------------------------------------
-// LocalStorage (방 번호별 저장/로드)
+// LocalStorage (방별 저장 및 다중 이미지 호환)
 // ----------------------------------------------------
 function saveDataToLocalStorage() {
   let dataToSave = threads.map((t) => ({
@@ -287,7 +282,7 @@ function saveDataToLocalStorage() {
     beads: t.beads.map((b) => ({
       targetY: b.targetY,
       content: b.content,
-      imgData: b.imgData,
+      images: b.images,
       dateStr: b.dateStr,
       radius: b.radius,
       palette: b.palette,
@@ -311,12 +306,13 @@ function loadDataFromLocalStorage() {
         let t = new Thread(td.x, td.topY, td.bottomY, td.recipient);
         t.color = td.color;
         t.beads = td.beads.map((bd) => {
+          let imgs = bd.images || (bd.imgData ? [bd.imgData] : []);
           let b = new Bead(
             td.x,
             td.topY,
             bd.targetY,
             bd.content,
-            bd.imgData,
+            imgs,
             bd.dateStr,
           );
           b.radius = bd.radius;
@@ -360,7 +356,6 @@ function setupCanvasEvents() {
   if (!canvas || !canvas.elt) return;
   let el = canvas.elt;
 
-  // --- 터치 이벤트 ---
   el.addEventListener(
     "touchstart",
     (e) => {
@@ -386,7 +381,6 @@ function setupCanvasEvents() {
           }
         }
       }
-
       handlePress(tx, ty);
     },
     { passive: false },
@@ -440,12 +434,10 @@ function setupCanvasEvents() {
         openReadModal(targetBeadToHold, recipient);
       }
     }
-
     targetBeadToHold = null;
     handleRelease();
   });
 
-  // --- 마우스 이벤트 (노트북) ---
   el.addEventListener("mousedown", (e) => {
     if (isModalOpen()) return;
     if (millis() - lastTouchTime < 300) return;
@@ -454,7 +446,6 @@ function setupCanvasEvents() {
     let mx = e.clientX - rect.left;
     let my = e.clientY - rect.top;
 
-    // 비즈를 마우스로 누른 경우: 롱프레스(삭제) 대기 상태 시작
     for (let t of threads) {
       for (let b of t.beads) {
         if (b.contains(mx, my)) {
@@ -465,7 +456,6 @@ function setupCanvasEvents() {
         }
       }
     }
-
     handlePress(mx, my);
   });
 
@@ -491,7 +481,6 @@ function setupCanvasEvents() {
   window.addEventListener("mouseup", (e) => {
     if (isModalOpen()) return;
 
-    // 마우스를 뗐을 때 롱프레스 시간보다 짧았다면 -> 편지 읽기 창 열기 (탭)
     if (targetBeadToHold && !isLongPressTriggered) {
       let elapsed = millis() - pressStartTime;
       if (elapsed < LONG_PRESS_DURATION) {
@@ -507,7 +496,6 @@ function setupCanvasEvents() {
         openReadModal(targetBeadToHold, recipient);
       }
     }
-
     targetBeadToHold = null;
     handleRelease();
   });
@@ -515,7 +503,6 @@ function setupCanvasEvents() {
 
 function handlePress(px, py) {
   if (isModalOpen()) return;
-
   if (isSpacePressed) {
     for (let i = threads.length - 1; i >= 0; i--) {
       let t = threads[i];
@@ -696,7 +683,7 @@ class Thread {
 
     for (let b of this.beads) b.display();
   }
-  addBead(content, imgData, dateStr) {
+  addBead(content, images, dateStr) {
     let targetY = this.bottomY - this.beads.length * 32 - 18;
     if (targetY < this.topY + 20) targetY = this.topY + 20;
     let newBead = new Bead(
@@ -704,7 +691,7 @@ class Thread {
       this.topY,
       targetY,
       content,
-      imgData,
+      images,
       dateStr,
     );
     this.beads.push(newBead);
@@ -787,12 +774,12 @@ class FallingThreadSegment {
 }
 
 class Bead {
-  constructor(x, startY, targetY, content, imgData, dateStr) {
+  constructor(x, startY, targetY, content, images, dateStr) {
     this.x = x;
     this.y = startY;
     this.targetY = targetY;
     this.content = content;
-    this.imgData = imgData;
+    this.images = images || [];
     this.dateStr = dateStr;
     this.radius = random(13, 17);
     this.palette = random(beadPalette);
@@ -1020,7 +1007,7 @@ class DustParticle {
 }
 
 // ----------------------------------------------------
-// UI 및 모달 이벤트
+// UI 및 모달 이벤트 (다중 이미지 관리 로직 포함)
 // ----------------------------------------------------
 function drawScissorsCursor(x, y) {
   push();
@@ -1055,18 +1042,18 @@ function setupUIEvents() {
 
   let fileInput = document.getElementById("letter-img-input");
   document.getElementById("trigger-file-btn").onclick = () => fileInput.click();
+
   fileInput.onchange = (e) => {
-    let file = e.target.files[0];
-    if (file) {
-      let reader = new FileReader();
-      reader.onload = (event) => {
-        uploadedImgData = event.target.result;
-        document.getElementById("img-preview").src = uploadedImgData;
-        document
-          .getElementById("img-preview-container")
-          .classList.remove("hidden");
-      };
-      reader.readAsDataURL(file);
+    let files = e.target.files;
+    if (files && files.length > 0) {
+      for (let file of files) {
+        let reader = new FileReader();
+        reader.onload = (event) => {
+          uploadedImages.push(event.target.result);
+          updateImagePreviews();
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 
@@ -1099,17 +1086,36 @@ function setupUIEvents() {
     let ctx = canvasElem.getContext("2d");
     ctx.drawImage(videoElem, 0, 0, canvasElem.width, canvasElem.height);
 
-    uploadedImgData = canvasElem.toDataURL("image/png");
-    document.getElementById("img-preview").src = uploadedImgData;
-    document.getElementById("img-preview-container").classList.remove("hidden");
+    let capturedData = canvasElem.toDataURL("image/png");
+    uploadedImages.push(capturedData);
+    updateImagePreviews();
     stopCameraStream();
   };
+}
 
-  document.getElementById("remove-img-btn").onclick = () => {
-    uploadedImgData = null;
-    document.getElementById("letter-img-input").value = "";
-    document.getElementById("img-preview-container").classList.add("hidden");
-  };
+function updateImagePreviews() {
+  let container = document.getElementById("img-preview-container");
+  container.innerHTML = "";
+  if (uploadedImages.length > 0) {
+    container.classList.remove("hidden");
+    uploadedImages.forEach((imgSrc, index) => {
+      let div = document.createElement("div");
+      div.className =
+        "relative w-full h-20 bg-black/50 rounded-lg overflow-hidden border border-white/20";
+      div.innerHTML = `
+        <img src="${imgSrc}" class="w-full h-full object-cover" />
+        <button type="button" onclick="removeUploadedImage(${index})" class="absolute top-1 right-1 bg-black/80 text-white w-5 h-5 rounded-full text-xs flex items-center justify-center">✕</button>
+      `;
+      container.appendChild(div);
+    });
+  } else {
+    container.classList.add("hidden");
+  }
+}
+
+function removeUploadedImage(index) {
+  uploadedImages.splice(index, 1);
+  updateImagePreviews();
 }
 
 function stopCameraStream() {
@@ -1158,7 +1164,7 @@ function openWriteModal(recipient) {
   document.getElementById("write-modal-date").innerText = dateStr;
 
   document.getElementById("letter-text-input").value = "";
-  uploadedImgData = null;
+  uploadedImages = [];
   document.getElementById("img-preview-container").classList.add("hidden");
   document.getElementById("write-modal").classList.remove("hidden");
   setTimeout(() => document.getElementById("letter-text-input").focus(), 50);
@@ -1171,10 +1177,10 @@ function closeWriteModal() {
 
 function confirmWriteModal() {
   let text = document.getElementById("letter-text-input").value.trim();
-  if (!text && !uploadedImgData) return;
+  if (!text && uploadedImages.length === 0) return;
   let dateStr = document.getElementById("write-modal-date").innerText;
   if (currentSelectedThread) {
-    currentSelectedThread.addBead(text, uploadedImgData, dateStr);
+    currentSelectedThread.addBead(text, [...uploadedImages], dateStr);
   }
   closeWriteModal();
 }
@@ -1186,14 +1192,21 @@ function openReadModal(bead, recipient) {
   document.getElementById("read-modal-date").innerText = bead.dateStr;
   document.getElementById("read-modal-text").innerText = bead.content || "";
 
-  let imgContainer = document.getElementById("read-modal-img-container");
-  let imgElem = document.getElementById("read-modal-img");
-  if (bead.imgData) {
-    imgElem.src = bead.imgData;
+  let imgContainer = document.getElementById("read-modal-images");
+  imgContainer.innerHTML = "";
+  if (bead.images && bead.images.length > 0) {
     imgContainer.classList.remove("hidden");
+    bead.images.forEach((imgSrc) => {
+      let wrap = document.createElement("div");
+      wrap.className =
+        "w-full rounded-xl overflow-hidden border border-white/10 bg-black/40";
+      wrap.innerHTML = `<img src="${imgSrc}" class="w-full max-h-72 object-contain mx-auto" />`;
+      imgContainer.appendChild(wrap);
+    });
   } else {
     imgContainer.classList.add("hidden");
   }
+
   document.getElementById("read-modal").classList.remove("hidden");
 }
 

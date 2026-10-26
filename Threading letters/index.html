@@ -223,6 +223,35 @@
       </svg>
     </div>
 
+    <!-- 우측 상단 Room 전환 탭 -->
+    <div class="fixed top-5 right-5 z-30 flex items-center gap-2">
+      <div
+        class="glass-panel p-1 rounded-xl flex gap-1 shadow-xl border border-white/10"
+      >
+        <button
+          id="room-btn-1"
+          onclick="switchRoom(1)"
+          class="px-3 py-1.5 text-xs font-medium rounded-lg transition-all bg-indigo-500 text-white shadow"
+        >
+          Room 1
+        </button>
+        <button
+          id="room-btn-2"
+          onclick="switchRoom(2)"
+          class="px-3 py-1.5 text-xs font-medium rounded-lg transition-all text-gray-400 hover:text-white"
+        >
+          Room 2
+        </button>
+        <button
+          id="room-btn-3"
+          onclick="switchRoom(3)"
+          class="px-3 py-1.5 text-xs font-medium rounded-lg transition-all text-gray-400 hover:text-white"
+        >
+          Room 3
+        </button>
+      </div>
+    </div>
+
     <!-- p5.js Canvas Container -->
     <div id="canvas-container"></div>
 
@@ -266,13 +295,13 @@
       </div>
     </div>
 
-    <!-- Modal 2: 편지 작성 모달 -->
+    <!-- Modal 2: 편지 작성 모달 (다중 이미지 지원) -->
     <div
       id="write-modal"
       class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4"
     >
       <div
-        class="glass-panel p-6 rounded-2xl w-[90vw] max-w-md shadow-2xl border border-white/10"
+        class="glass-panel p-6 rounded-2xl w-[90vw] max-w-md shadow-2xl border border-white/10 max-h-[90vh] overflow-y-auto custom-scrollbar"
       >
         <div class="flex justify-between items-center mb-4">
           <div>
@@ -295,7 +324,7 @@
         <div class="space-y-4">
           <textarea
             id="letter-text-input"
-            rows="4"
+            rows="3"
             placeholder="마음속에 담아두었던 이야기를 써내려가 보세요..."
             class="w-full p-3 bg-white/5 border border-white/15 rounded-xl text-sm text-gray-100 focus:outline-none focus:border-indigo-400 resize-none"
           ></textarea>
@@ -311,6 +340,7 @@
               type="file"
               id="letter-img-input"
               accept="image/*"
+              multiple
               class="hidden"
             />
             <button
@@ -318,22 +348,13 @@
               type="button"
               class="py-2 px-3 bg-white/5 border border-white/15 rounded-xl text-xs text-gray-300"
             >
-              앨범에서 선택
+              앨범에서 선택 (여러 장)
             </button>
           </div>
           <div
             id="img-preview-container"
-            class="hidden relative w-full h-24 bg-black/40 rounded-lg overflow-hidden border border-white/10"
-          >
-            <img id="img-preview" class="w-full h-full object-cover" />
-            <button
-              id="remove-img-btn"
-              type="button"
-              class="absolute top-1 right-1 bg-black/75 text-white p-1 rounded-full text-xs"
-            >
-              ✕
-            </button>
-          </div>
+            class="hidden grid grid-cols-3 gap-2 max-h-36 overflow-y-auto p-1 bg-black/30 rounded-xl border border-white/10"
+          ></div>
           <button
             id="save-letter-btn"
             type="button"
@@ -386,16 +407,16 @@
       </div>
     </div>
 
-    <!-- Modal 4: 편지 읽기 모달 -->
+    <!-- Modal 4: 편지 읽기 모달 (다중 이미지 스크롤 지원) -->
     <div
       id="read-modal"
       class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4"
     >
       <div
-        class="glass-panel p-6 rounded-2xl w-[90vw] max-w-md shadow-2xl border border-white/10 relative"
+        class="glass-panel p-6 rounded-2xl w-[90vw] max-w-md shadow-2xl border border-white/10 relative max-h-[85vh] flex flex-col"
       >
         <div
-          class="flex justify-between items-start mb-4 border-b border-white/10 pb-3"
+          class="flex justify-between items-start mb-4 border-b border-white/10 pb-3 shrink-0"
         >
           <div>
             <h3
@@ -412,13 +433,8 @@
             ✕
           </button>
         </div>
-        <div class="space-y-4 max-h-[60vh] overflow-y-auto">
-          <div
-            id="read-modal-img-container"
-            class="hidden w-full rounded-xl overflow-hidden border border-white/10 bg-black/40"
-          >
-            <img id="read-modal-img" class="w-full max-h-60 object-contain" />
-          </div>
+        <div class="space-y-4 overflow-y-auto custom-scrollbar pr-1">
+          <div id="read-modal-images" class="hidden space-y-2"></div>
           <p
             id="read-modal-text"
             class="text-sm text-gray-200 whitespace-pre-wrap leading-relaxed font-light"
@@ -430,31 +446,3 @@
     <script src="sketch.js"></script>
   </body>
 </html>
-<!-- 우측 상단 Room 전환 탭 -->
-<div class="fixed top-5 right-5 z-30 flex items-center gap-2">
-  <div
-    class="glass-panel p-1 rounded-xl flex gap-1 shadow-xl border border-white/10"
-  >
-    <button
-      id="room-btn-1"
-      onclick="switchRoom(1)"
-      class="px-3 py-1.5 text-xs font-medium rounded-lg transition-all bg-indigo-500 text-white shadow"
-    >
-      Room 1
-    </button>
-    <button
-      id="room-btn-2"
-      onclick="switchRoom(2)"
-      class="px-3 py-1.5 text-xs font-medium rounded-lg transition-all text-gray-400 hover:text-white"
-    >
-      Room 2
-    </button>
-    <button
-      id="room-btn-3"
-      onclick="switchRoom(3)"
-      class="px-3 py-1.5 text-xs font-medium rounded-lg transition-all text-gray-400 hover:text-white"
-    >
-      Room 3
-    </button>
-  </div>
-</div>
