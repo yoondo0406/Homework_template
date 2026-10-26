@@ -26,7 +26,7 @@ let lastTouchTime = 0;
 let pressStartTime = 0;
 let targetBeadToHold = null;
 let isLongPressTriggered = false;
-const LONG_PRESS_DURATION = 800;
+const LONG_PRESS_DURATION = 800; // 0.8초 이상 누르면 삭제
 
 const threadPalette = [
   "#F4A261",
@@ -145,19 +145,19 @@ function windowResized() {
 function switchRoom(roomNum) {
   currentRoom = roomNum;
 
-  // 버튼 UI 스타일 업데이트
   for (let i = 1; i <= 3; i++) {
     let btn = document.getElementById(`room-btn-${i}`);
-    if (i === roomNum) {
-      btn.className =
-        "px-3 py-1.5 text-xs font-medium rounded-lg transition-all bg-indigo-500 text-white shadow";
-    } else {
-      btn.className =
-        "px-3 py-1.5 text-xs font-medium rounded-lg transition-all text-gray-400 hover:text-white";
+    if (btn) {
+      if (i === roomNum) {
+        btn.className =
+          "px-3 py-1.5 text-xs font-medium rounded-lg transition-all bg-indigo-500 text-white shadow";
+      } else {
+        btn.className =
+          "px-3 py-1.5 text-xs font-medium rounded-lg transition-all text-gray-400 hover:text-white";
+      }
     }
   }
 
-  // 해당 방의 데이터 불러오기
   loadDataFromLocalStorage();
   playTone(520, "sine", 0.2, 0.1);
 }
@@ -209,6 +209,7 @@ function draw() {
     }
   }
 
+  // 롱프레스(꾹 누르기) 시 삭제 원형 애니메이션 처리 (마우스 & 터치 공통)
   if (targetBeadToHold && !isLongPressTriggered && !isModalOpen()) {
     let elapsed = millis() - pressStartTime;
     if (elapsed >= LONG_PRESS_DURATION) {
@@ -274,7 +275,7 @@ function draw() {
 }
 
 // ----------------------------------------------------
-// LocalStorage (방 번호별 저장/로드 분리)
+// LocalStorage (방 번호별 저장/로드)
 // ----------------------------------------------------
 function saveDataToLocalStorage() {
   let dataToSave = threads.map((t) => ({
@@ -340,7 +341,7 @@ function removeBeadFromStorage(beadObj) {
 }
 
 // ----------------------------------------------------
-// 캔버스 이벤트 바인딩
+// 캔버스 이벤트 바인딩 (마우스 & 터치 공통 롱프레스 지원)
 // ----------------------------------------------------
 window.addEventListener("keydown", (e) => {
   unlockAudio();
@@ -359,6 +360,7 @@ function setupCanvasEvents() {
   if (!canvas || !canvas.elt) return;
   let el = canvas.elt;
 
+  // --- 터치 이벤트 ---
   el.addEventListener(
     "touchstart",
     (e) => {
@@ -443,6 +445,7 @@ function setupCanvasEvents() {
     handleRelease();
   });
 
+  // --- 마우스 이벤트 (노트북) ---
   el.addEventListener("mousedown", (e) => {
     if (isModalOpen()) return;
     if (millis() - lastTouchTime < 300) return;
@@ -451,12 +454,13 @@ function setupCanvasEvents() {
     let mx = e.clientX - rect.left;
     let my = e.clientY - rect.top;
 
+    // 비즈를 마우스로 누른 경우: 롱프레스(삭제) 대기 상태 시작
     for (let t of threads) {
       for (let b of t.beads) {
         if (b.contains(mx, my)) {
-          playBeadSound();
-          b.triggerReadAnimation();
-          openReadModal(b, t.recipient);
+          targetBeadToHold = b;
+          pressStartTime = millis();
+          isLongPressTriggered = false;
           return;
         }
       }
@@ -467,15 +471,43 @@ function setupCanvasEvents() {
 
   window.addEventListener("mousemove", (e) => {
     if (isModalOpen()) return;
+    let rect = canvas.elt.getBoundingClientRect();
+    let mx = e.clientX - rect.left;
+    let my = e.clientY - rect.top;
+
+    if (
+      targetBeadToHold &&
+      dist(mx, my, targetBeadToHold.x, targetBeadToHold.y) > 20
+    ) {
+      targetBeadToHold = null;
+    }
+
     if (isDragging && dragStart && canvas && canvas.elt) {
-      let rect = canvas.elt.getBoundingClientRect();
-      dragCurrent.x = e.clientX - rect.left;
-      dragCurrent.y = e.clientY - rect.top;
+      dragCurrent.x = mx;
+      dragCurrent.y = my;
     }
   });
 
   window.addEventListener("mouseup", (e) => {
     if (isModalOpen()) return;
+
+    // 마우스를 뗐을 때 롱프레스 시간보다 짧았다면 -> 편지 읽기 창 열기 (탭)
+    if (targetBeadToHold && !isLongPressTriggered) {
+      let elapsed = millis() - pressStartTime;
+      if (elapsed < LONG_PRESS_DURATION) {
+        let recipient = "누군가";
+        for (let t of threads) {
+          if (t.beads.includes(targetBeadToHold)) {
+            recipient = t.recipient;
+            break;
+          }
+        }
+        playBeadSound();
+        targetBeadToHold.triggerReadAnimation();
+        openReadModal(targetBeadToHold, recipient);
+      }
+    }
+
     targetBeadToHold = null;
     handleRelease();
   });
