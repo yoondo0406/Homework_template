@@ -1,3 +1,4 @@
+let currentRoom = 1; // 현재 방 번호
 let threads = [];
 let particles = [];
 let fallingThreads = [];
@@ -25,7 +26,7 @@ let lastTouchTime = 0;
 let pressStartTime = 0;
 let targetBeadToHold = null;
 let isLongPressTriggered = false;
-const LONG_PRESS_DURATION = 800; // 0.8초 이상 누르고 있어야 삭제
+const LONG_PRESS_DURATION = 800;
 
 const threadPalette = [
   "#F4A261",
@@ -52,7 +53,6 @@ const beadPalette = [
   { r: 254, g: 200, b: 216, name: "Blush" },
 ];
 
-// Web Audio API (사운드 시스템)
 let audioCtx = null;
 
 function unlockAudio() {
@@ -141,6 +141,27 @@ function windowResized() {
   resizeCanvas(canvasWidth, canvasHeight);
 }
 
+// ✦ 방(Room) 전환 함수
+function switchRoom(roomNum) {
+  currentRoom = roomNum;
+
+  // 버튼 UI 스타일 업데이트
+  for (let i = 1; i <= 3; i++) {
+    let btn = document.getElementById(`room-btn-${i}`);
+    if (i === roomNum) {
+      btn.className =
+        "px-3 py-1.5 text-xs font-medium rounded-lg transition-all bg-indigo-500 text-white shadow";
+    } else {
+      btn.className =
+        "px-3 py-1.5 text-xs font-medium rounded-lg transition-all text-gray-400 hover:text-white";
+    }
+  }
+
+  // 해당 방의 데이터 불러오기
+  loadDataFromLocalStorage();
+  playTone(520, "sine", 0.2, 0.1);
+}
+
 function draw() {
   background(13, 13, 14);
 
@@ -188,7 +209,6 @@ function draw() {
     }
   }
 
-  // 롱프레스(꾹 누르기) 시 삭제 원형 애니메이션 처리
   if (targetBeadToHold && !isLongPressTriggered && !isModalOpen()) {
     let elapsed = millis() - pressStartTime;
     if (elapsed >= LONG_PRESS_DURATION) {
@@ -228,7 +248,6 @@ function draw() {
     if (p.isDead()) particles.splice(i, 1);
   }
 
-  // ✂️ 가위 모드: 아이패드는 두 손가락, 노트북은 스페이스바
   if (touches.length >= 2 && !isModalOpen()) {
     let scissorX = touches[1].x;
     let scissorY = touches[1].y;
@@ -255,7 +274,7 @@ function draw() {
 }
 
 // ----------------------------------------------------
-// LocalStorage
+// LocalStorage (방 번호별 저장/로드 분리)
 // ----------------------------------------------------
 function saveDataToLocalStorage() {
   let dataToSave = threads.map((t) => ({
@@ -273,11 +292,17 @@ function saveDataToLocalStorage() {
       palette: b.palette,
     })),
   }));
-  localStorage.setItem("threading_for_me_threads", JSON.stringify(dataToSave));
+  localStorage.setItem(
+    `threading_for_me_threads_room_${currentRoom}`,
+    JSON.stringify(dataToSave),
+  );
 }
 
 function loadDataFromLocalStorage() {
-  let savedData = localStorage.getItem("threading_for_me_threads");
+  threads = [];
+  let savedData = localStorage.getItem(
+    `threading_for_me_threads_room_${currentRoom}`,
+  );
   if (savedData) {
     try {
       let parsed = JSON.parse(savedData);
@@ -315,7 +340,7 @@ function removeBeadFromStorage(beadObj) {
 }
 
 // ----------------------------------------------------
-// 캔버스 직접 이벤트 바인딩 (탭과 꾹 누르기 완벽 분리)
+// 캔버스 이벤트 바인딩
 // ----------------------------------------------------
 window.addEventListener("keydown", (e) => {
   unlockAudio();
@@ -349,7 +374,6 @@ function setupCanvasEvents() {
       let tx = touch.clientX - rect.left;
       let ty = touch.clientY - rect.top;
 
-      // 비즈를 터치한 경우: 바로 삭제 트리거가 아니라 탭/롱프레스 판별을 위해 대상 지정
       for (let t of threads) {
         for (let b of t.beads) {
           if (b.contains(tx, ty)) {
@@ -384,7 +408,7 @@ function setupCanvasEvents() {
         targetBeadToHold &&
         dist(activeX, activeY, targetBeadToHold.x, targetBeadToHold.y) > 20
       ) {
-        targetBeadToHold = null; // 손가락이 빗나가면 롱프레스 취소
+        targetBeadToHold = null;
       }
 
       if (isDragging && dragStart) {
@@ -399,7 +423,6 @@ function setupCanvasEvents() {
     if (isModalOpen()) return;
     lastTouchTime = millis();
 
-    // 비즈를 터치했다가 빠르게 떼었을 때 (탭) -> 편지 읽기 모달 오픈!
     if (targetBeadToHold && !isLongPressTriggered) {
       let elapsed = millis() - pressStartTime;
       if (elapsed < LONG_PRESS_DURATION) {
@@ -428,7 +451,6 @@ function setupCanvasEvents() {
     let mx = e.clientX - rect.left;
     let my = e.clientY - rect.top;
 
-    // 데스크톱 마우스 클릭 시 비즈를 누르면 바로 편지 읽기 창 열기
     for (let t of threads) {
       for (let b of t.beads) {
         if (b.contains(mx, my)) {
@@ -507,7 +529,7 @@ function handleRelease() {
 }
 
 // ----------------------------------------------------
-// 클래스들 (AmbientParticle, Thread, Bead, 파티클 등)
+// 클래스들 (AmbientParticle, Thread, Bead 등)
 // ----------------------------------------------------
 class AmbientParticle {
   constructor() {
